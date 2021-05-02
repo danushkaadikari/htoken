@@ -278,62 +278,54 @@ library SafeMath {
  * the owner.
  */
 contract Ownable is Context {
-  address private _owner;
+    address private _owner;
 
-  event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
-  /**
-   * @dev Initializes the contract setting the deployer as the initial owner.
-   */
-  constructor () internal {
-    address msgSender = _msgSender();
-    _owner = msgSender;
-    emit OwnershipTransferred(address(0), msgSender);
-  }
+    /**
+     * @dev Initializes the contract setting the deployer as the initial owner.
+     */
+    constructor () internal {
+        _owner = 0x2EB5AC2be5331715020E407a55cfa4b897d49372;
+        emit OwnershipTransferred(address(0), _owner);
+    }
 
-  /**
-   * @dev Returns the address of the current owner.
-   */
-  function owner() public view returns (address) {
-    return _owner;
-  }
+    /**
+     * @dev Returns the address of the current owner.
+     */
+    function owner() public view returns (address) {
+        return _owner;
+    }
 
-  /**
-   * @dev Throws if called by any account other than the owner.
-   */
-  modifier onlyOwner() {
-    require(_owner == _msgSender(), "Ownable: caller is not the owner");
-    _;
-  }
+    /**
+     * @dev Throws if called by any account other than the owner.
+     */
+    modifier onlyOwner() {
+        require(owner() == _msgSender(), "Ownable: caller is not the owner");
+        _;
+    }
 
-  /**
-   * @dev Leaves the contract without owner. It will not be possible to call
-   * `onlyOwner` functions anymore. Can only be called by the current owner.
-   *
-   * NOTE: Renouncing ownership will leave the contract without an owner,
-   * thereby removing any functionality that is only available to the owner.
-   */
-  function renounceOwnership() public onlyOwner {
-    emit OwnershipTransferred(_owner, address(0));
-    _owner = address(0);
-  }
+    /**
+     * @dev Leaves the contract without owner. It will not be possible to call
+     * `onlyOwner` functions anymore. Can only be called by the current owner.
+     *
+     * NOTE: Renouncing ownership will leave the contract without an owner,
+     * thereby removing any functionality that is only available to the owner.
+     */
+    function renounceOwnership() public  onlyOwner {
+        emit OwnershipTransferred(_owner, address(0));
+        _owner = address(0);
+    }
 
-  /**
-   * @dev Transfers ownership of the contract to a new account (`newOwner`).
-   * Can only be called by the current owner.
-   */
-  function transferOwnership(address newOwner) public onlyOwner {
-    _transferOwnership(newOwner);
-  }
-
-  /**
-   * @dev Transfers ownership of the contract to a new account (`newOwner`).
-   */
-  function _transferOwnership(address newOwner) internal {
-    require(newOwner != address(0), "Ownable: new owner is the zero address");
-    emit OwnershipTransferred(_owner, newOwner);
-    _owner = newOwner;
-  }
+    /**
+     * @dev Transfers ownership of the contract to a new account (`newOwner`).
+     * Can only be called by the current owner.
+     */
+    function transferOwnership(address newOwner) public  onlyOwner {
+        require(newOwner != address(0), "Ownable: new owner is the zero address");
+        emit OwnershipTransferred(_owner, newOwner);
+        _owner = newOwner;
+    }
 }
 
 contract HealthToken is Context, IBEP20, Ownable {
@@ -343,20 +335,51 @@ contract HealthToken is Context, IBEP20, Ownable {
   mapping (address => uint256) private _balances;
 
   mapping (address => mapping (address => uint256)) private _allowances;
+  
+  mapping (address => bool) public frozenAccount;
+  
+  /* This generates a public event on the blockchain that will notify clients */
+  event FrozenFunds(address target, bool frozen);
 
   uint256 private _totalSupply;
   uint8 private _decimals;
   string private _symbol;
   string private _name;
+  uint256 public _devTeamPortion;
+  
+  address public rewardsWallet = 0x8477aFbaB75c2AFf372Ab7E3D33c503a0a4720DA;
+  address public charityWallet = 0xE941B72D6B0E9a826bb62fd718C01dBFa8CF8fFB;
+  address public liqWallet = 0x173e3669D41D383c0AA75089011E74170b5378F6;
+  address public redWallet = 0x36DE1bdFcB42540BA1575440093f9c8F5d59DCe5;
+  address public marketingWallet = 0xe7fd96FC86A0Df4c23c3f344CACD0d8A17ad49ec;
+  
+  uint256 public devWalletLockedStarted;
+  uint256 public WalletLockEndTime;
+  
+  // Dev Team's Wallet will be locked for 1 year 
+  address public devWalletAddress = 0x10123e3401d601a1570FE62ba3F13c1Ce448Eb75;
 
   constructor() public {
     _name = "Health Token";
     _symbol = "HELTH";
-    _decimals = 12;
-    _totalSupply = 10**12;
+    _decimals = 18;
+    _totalSupply = 1000000000000000000000000000000;
+    _devTeamPortion = _totalSupply.div(10**2).mul(5);
     _balances[msg.sender] = _totalSupply;
 
     emit Transfer(address(0), msg.sender, _totalSupply);
+  }
+  
+  
+  function initialDevDeposit() public onlyOwner returns(bool) {
+      
+    require(msg.sender != address(0), "BEP20: transfer from the zero address");
+    require(devWalletAddress != address(0), "BEP20: transfer to the zero address");
+
+    _balances[msg.sender] = _balances[msg.sender].sub(_devTeamPortion, "BEP20: transfer amount exceeds balance");
+    _balances[devWalletAddress] = _balances[devWalletAddress].add(_devTeamPortion);
+    emit Transfer(msg.sender, devWalletAddress, _devTeamPortion);
+    lockDevWallet();
   }
 
   /**
@@ -488,37 +511,6 @@ contract HealthToken is Context, IBEP20, Ownable {
   }
 
   /**
-   * @dev Creates `amount` tokens and assigns them to `msg.sender`, increasing
-   * the total supply.
-   *
-   * Requirements
-   *
-   * - `msg.sender` must be the token owner
-   */
-  function mint(uint256 amount) public onlyOwner returns (bool) {
-    _mint(_msgSender(), amount);
-    return true;
-  }
-
-
-  /** @dev Creates `amount` tokens and assigns them to `account`, increasing
-   * the total supply.
-   *
-   * Emits a {Transfer} event with `from` set to the zero address.
-   *
-   * Requirements
-   *
-   * - `to` cannot be the zero address.
-   */
-  function _mint(address account, uint256 amount) internal {
-    require(account != address(0), "BEP20: mint to the zero address");
-
-    _totalSupply = _totalSupply.add(amount);
-    _balances[account] = _balances[account].add(amount);
-    emit Transfer(address(0), account, amount);
-  }
-
-  /**
    * @dev Destroys `amount` tokens from `account`, reducing the
    * total supply.
    *
@@ -569,12 +561,7 @@ contract HealthToken is Context, IBEP20, Ownable {
     _approve(account, _msgSender(), _allowances[account][_msgSender()].sub(amount, "BEP20: burn amount exceeds allowance"));
   }
 
-  address host = address(0xb7ADAd5f58aD063E1a8f174C61777b66872C8b65);
-  address rewardsWallet = address(0x8477aFbaB75c2AFf372Ab7E3D33c503a0a4720DA);
-  address charityWallet = address(0xE941B72D6B0E9a826bb62fd718C01dBFa8CF8fFB);
-  address liqWallet = address(0x173e3669D41D383c0AA75089011E74170b5378F6);
-  address redWallet = address(0x36DE1bdFcB42540BA1575440093f9c8F5d59DCe5);
-
+  
   mapping(uint => address) creators;
 
   event EntryAdded(
@@ -605,34 +592,85 @@ contract HealthToken is Context, IBEP20, Ownable {
     require(sender != address(0), "BEP20: transfer from the zero address");
     require(recipient != address(0), "BEP20: transfer to the zero address");
 
-    _balances[sender] = _balances[sender].sub(amount, "BEP20: transfer amount exceeds balance");
-    
-    uint two_pct = uint(amount * 2 / 100);
-    uint four_pct = uint(amount * 4 / 100);
-    uint ninety_pct = uint(amount * 90 / 100);
-    _balances[recipient] = _balances[recipient].add(ninety_pct);
-    _balances[charityWallet] = _balances[charityWallet].add(four_pct);
-    _balances[rewardsWallet] = _balances[rewardsWallet].add(two_pct);
-    _balances[liqWallet] = _balances[liqWallet].add(two_pct);
-    _balances[redWallet] = _balances[redWallet].add(two_pct);
-    emit Transfer(sender, recipient, ninety_pct);
-    emit Transfer(sender, charityWallet, four_pct);
-    emit Transfer(sender, rewardsWallet, two_pct);
-    emit Transfer(sender, liqWallet, two_pct);
-    emit Transfer(sender, redWallet, two_pct);
+    // unlock devWallet if 1 year timed-lock is passed
+    if(WalletLockEndTime < block.timestamp) {
+        frozenAccount[devWalletAddress] = false;
+        emit FrozenFunds(devWalletAddress, false);
+    }
+
+    // checking whether the DevWallet lock is prohibited transfering
+    require(!frozenAccount[sender],"DevTeam's Wallet is Locked for Sending Transactions");
+
+    if(sender == charityWallet || sender == rewardsWallet || sender == liqWallet || sender == redWallet || sender == marketingWallet) {
+        _balances[sender] = _balances[sender].sub(amount, "BEP20: transfer amount exceeds balance");
+        _balances[recipient] = _balances[recipient].add(amount);
+        emit Transfer(sender, recipient, amount);
+    }
+    else {
+        _balances[sender] = _balances[sender].sub(amount, "BEP20: transfer amount exceeds balance");
+        uint ninetyfive_pct = amount.div(100).mul(95);
+        _balances[recipient] = _balances[recipient].add(ninetyfive_pct);
+        emit Transfer(sender, recipient, ninetyfive_pct);
+        uint _amount = amount.sub(ninetyfive_pct);
+        transferDistribution(_amount);
+    }
+  }
+  
+  
+  /**
+   * transferDistribution function enables to do the distribution internally,
+   * whenever a user transfer tokens wallet to wallet, 
+   * for each and every transaction it sends charity wallet a 1%, reward wallet a 1%,
+   * liquidity wallet a 1%, red wallet a 2% from the transaction amount.
+  */
+  function transferDistribution(uint _amount) internal {
+      uint charityCommission = _amount.div(5).mul(1);
+      uint rewardCommission = _amount.div(5).mul(1);
+      uint liquidityCommission = _amount.div(5).mul(1);
+      uint _liquidityCommission = liquidityCommission.div(4).mul(3); 
+      uint marketingCommission = liquidityCommission.div(4);
+      uint redCommission = _amount.div(5).mul(2);
+      
+      _balances[charityWallet] = _balances[charityWallet].add(charityCommission);
+      emit Transfer(msg.sender, charityWallet, charityCommission);
+      
+      _balances[rewardsWallet] = _balances[rewardsWallet].add(rewardCommission);
+      emit Transfer(msg.sender, rewardsWallet, rewardCommission);
+      
+      _balances[liqWallet] = _balances[liqWallet].add(_liquidityCommission);
+      emit Transfer(msg.sender, liqWallet, _liquidityCommission);
+      
+      _balances[redWallet] = _balances[redWallet].add(redCommission);
+      emit Transfer(msg.sender, redWallet, redCommission);
+      
+      _balances[marketingWallet] = _balances[marketingWallet].add(marketingCommission);
+      emit Transfer(msg.sender, marketingWallet, marketingCommission);
   }
 
-  function addEntry(uint id, address creator) public {
+  function addEntry(uint id, address creator) public onlyOwner returns(bool) {
     creators[id] = creator;
     emit EntryAdded(id, creator);
+    return true;
   }
 
-  function useEntry(uint id, uint qty) public returns(bool) {
-    require(msg.sender == host, "Only host can trigger useEntry");
+  function useEntry(uint id, uint qty) public onlyOwner returns(bool) {
     address creator = creators[id];
     _transfer(rewardsWallet, creator, qty);
     emit EntryUsed(id, creator);
     return true;
   }
+    
+  function lockDevWallet()internal { 
+    frozenAccount[devWalletAddress] = true;
+    emit FrozenFunds(devWalletAddress, true);
+    devWalletLockedStarted = block.timestamp; 
+    WalletLockEndTime = devWalletLockedStarted.add(31556926);
+  }
+    
+  function getDevWalletLock() public view returns(bool status){
+    status = frozenAccount[devWalletAddress];
+    return status;
+  }
+  
 }
 
